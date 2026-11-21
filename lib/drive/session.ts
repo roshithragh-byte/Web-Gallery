@@ -8,7 +8,7 @@ export async function createAdminSession(email:string){
   const c=getDriveConfig(); if(email.toLowerCase()!==c.adminEmail) throw new Error("This Google account is not the configured gallery administrator.");
   const payload=Buffer.from(JSON.stringify({email,exp:Date.now()+7*24*60*60*1000})).toString("base64url");
   const token=payload+"."+signature(payload,c.authSecret);
-  (await cookies()).set(COOKIE,token,{httpOnly:true,secure:true,sameSite:"lax",path:"/",maxAge:7*24*60*60});
+  (await cookies()).set(COOKIE,token,{httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"lax",path:"/",maxAge:7*24*60*60});
 }
 export async function isAdminSession(){
   const c=getDriveConfig(); const token=(await cookies()).get(COOKIE)?.value;
