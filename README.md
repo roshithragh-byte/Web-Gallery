@@ -1,50 +1,76 @@
 # Stillframe — Web Gallery
 
-A private, read-only family photo gallery backed by one administrator-selected Google Drive folder.
+A dark, read-only photo gallery backed by one administrator-selected Google Drive folder.
 
-## Current milestone
+## Drive integration in this branch
 
-This repository contains the initial Next.js application shell, the dark cinematic gallery experience, environment configuration, and tested Drive query-scope helpers. The live Drive connection and invitation-only authentication are intentionally not enabled yet; the app must not be deployed as a functioning private gallery until those security controls are implemented.
+- Server-side Google OAuth web-server flow with state validation.
+- Administrator identity checked against `ADMIN_EMAIL`.
+- Refresh token encrypted with AES-256-GCM and persisted in PostgreSQL.
+- Recursive traversal of the configured Drive root and child folders (up to 500 folders).
+- Image MIME-type filtering and server-side image proxy.
+- No browser-supplied root folder IDs and no public Drive URLs.
+- Gallery listing and image routes require the signed administrator session cookie.
 
-## Stack
+## Required Vercel environment variables
 
-- Next.js App Router + React + TypeScript
-- Tailwind CSS v4
-- Vitest for unit tests
-- Google Drive API v3 integration (next milestone)
-- Vercel deployment target
+Set all values for Production (and Preview only if you intentionally use a separate test OAuth client):
 
-## Local setup
+| Variable | Description |
+|---|---|
+| `GOOGLE_CLIENT_ID` | Web OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | Web OAuth client secret |
+| `GOOGLE_REDIRECT_URI` | `https://stillframe-gallery.vercel.app/api/admin/drive/callback` |
+| `GOOGLE_DRIVE_ROOT_FOLDER_ID` | Selected shared folder ID |
+| `DATABASE_URL` | PostgreSQL connection string (TLS enabled) |
+| `TOKEN_ENCRYPTION_KEY` | Long random secret used to encrypt the Drive refresh token |
+| `AUTH_SECRET` | Separate long random secret used to sign the admin session |
+| `ADMIN_EMAIL` | Exact Google account email authorized to connect Drive |
+
+Generate two independent secrets (do not reuse the OAuth client secret):
 
 ```bash
-cp .env.example .env.local
+openssl rand -base64 32
+openssl rand -base64 32
+```
+
+Put the first in `TOKEN_ENCRYPTION_KEY` and the second in `AUTH_SECRET`. Never commit actual secrets.
+
+## Google Cloud OAuth setup
+
+Add this exact Authorized redirect URI to the web OAuth client:
+
+```
+https://stillframe-gallery.vercel.app/api/admin/drive/callback
+```
+
+The app requests `openid`, `email`, and `https://www.googleapis.com/auth/drive.readonly`. The Drive grant is used only by the server. The OAuth consent screen must include the administrator as an allowed user if Google project settings require it. Google may require verification for restricted Drive scopes.
+
+## Database
+
+The app creates a small `stillframe_secrets` table on first token save/read. Use a managed PostgreSQL database (for example Neon or Vercel Postgres) and set its TLS connection string as `DATABASE_URL`. Do not use a client-side database credential.
+
+## Connect and verify
+
+1. Deploy this branch after configuring the required environment variables.
+2. Visit `/api/admin/drive/connect` while signed in as the configured `ADMIN_EMAIL`.
+3. Complete Google consent using the Google account to which the photo folder was shared.
+4. The callback validates OAuth state and administrator identity, then encrypts and stores the refresh token.
+5. Return to the home page. The gallery calls `/api/gallery/photos`; images are streamed through `/api/gallery/image/[fileId]`.
+
+## Security status / limitations
+
+**This branch is an administrator-only integration milestone, not yet the finished family release.** The gallery API and image proxy currently require the administrator session. Invitation-based family authentication, family roles, and user management are not implemented yet. Do not share the deployment with family members as a production family gallery until those controls are added and tested.
+
+The root folder ID is server configuration. The backend traverses only that folder and descendants; it never lists the administrator's whole Drive. Image bytes are streamed from Drive through authenticated routes with private no-store caching.
+
+## Development
+
+```bash
 npm install
 npm run dev
-```
-
-Open http://localhost:3000.
-
-Run tests:
-
-```bash
 npm test
-```
+npm run build
+``
 
-## Google Drive boundary
-
-Set `GOOGLE_DRIVE_ROOT_FOLDER_ID` to the administrator-selected folder ID. The current configured folder is `1hY1TfUftj8WDHSOGoSR-dsPcrkZe33Ea`.
-
-Drive listing must always be scoped to this server-side configured root. Do not accept a folder ID from the browser as the gallery root and do not enumerate the user's entire Drive. Only image MIME types should be returned. OAuth tokens and client secrets must remain server-side and must never use a `NEXT_PUBLIC_` prefix.
-
-## Security / release gate
-
-Before enabling real photos or deploying for family use, implement and verify:
-
-1. Invitation-only family authentication and ADMIN / FAMILY_MEMBER roles.
-2. Administrator-only Google Drive OAuth connection and folder selection.
-3. Encrypted refresh-token storage and server-side token refresh.
-4. Root-folder and descendant validation for every listed file and image request.
-5. Authenticated image proxy endpoints with private cache controls.
-6. Revocation checks and tests proving uninvited/revoked users cannot access gallery data.
-
-The current UI is a frontend foundation, not a production-ready private gallery. Do not expose real family photos until the release gates above pass.
+A PostgreSQL database and the environment variables above are required to exercise the complete OAuth flow.
