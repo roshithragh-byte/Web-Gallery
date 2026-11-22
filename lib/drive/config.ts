@@ -8,5 +8,6 @@ export function getDriveConfig() {
     redirectUri: process.env.GOOGLE_REDIRECT_URI!, rootFolderId: process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID!,
     databaseUrl: process.env.DATABASE_URL!, encryptionKey: process.env.TOKEN_ENCRYPTION_KEY!,
     authSecret: process.env.AUTH_SECRET!, adminEmail: process.env.ADMIN_EMAIL!.toLowerCase(),
+    familyPassphrase: process.env.FAMILY_PASSPHRASE || "",
   };
 }

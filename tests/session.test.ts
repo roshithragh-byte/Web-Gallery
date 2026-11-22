@@ -102,7 +102,27 @@ describe("Session management", () => {
   });
 
   it("returns false when no session cookie is present", async () => {
-    const { isAdminSession } = await import("../lib/drive/session");
+    const { isAdminSession, isFamilySession, hasGalleryAccess } = await import("../lib/drive/session");
     expect(await isAdminSession()).toBe(false);
+    expect(await isFamilySession()).toBe(false);
+    expect(await hasGalleryAccess()).toBe(false);
+  });
+
+  it("creates and verifies a valid family session with correct passphrase", async () => {
+    process.env.FAMILY_PASSPHRASE = "SecretFamilyPass2026!";
+    const { createFamilySession, isFamilySession, hasGalleryAccess, isAdminSession } = await import("../lib/drive/session");
+    await createFamilySession("SecretFamilyPass2026!");
+
+    expect(mockCookieStore.has("stillframe_family")).toBe(true);
+    expect(await isFamilySession()).toBe(true);
+    expect(await hasGalleryAccess()).toBe(true);
+    // Family session should NOT have admin role
+    expect(await isAdminSession()).toBe(false);
+  });
+
+  it("rejects family session creation with incorrect passphrase", async () => {
+    process.env.FAMILY_PASSPHRASE = "SecretFamilyPass2026!";
+    const { createFamilySession } = await import("../lib/drive/session");
+    await expect(createFamilySession("WrongPassphrase")).rejects.toThrow(/invalid family passphrase/i);
   });
 });
