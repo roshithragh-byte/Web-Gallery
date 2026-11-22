@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
-import { ArrowUpRight, Cloud, KeyRound, LoaderCircle, LockKeyhole } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ArrowUpRight, ChevronLeft, ChevronRight, Cloud, KeyRound, LoaderCircle, LockKeyhole, X } from "lucide-react";
 
 type Photo = {
   id: string;
@@ -19,6 +19,7 @@ export function GalleryPhotos() {
   const [passphrase, setPassphrase] = useState("");
   const [passError, setPassError] = useState("");
   const [unlocking, setUnlocking] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   async function load() {
     setLoading(true);
@@ -64,9 +65,47 @@ export function GalleryPhotos() {
     }
   }
 
+  const handlePrev = useCallback(() => {
+    setSelectedIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : photos.length - 1));
+  }, [photos.length]);
+
+  const handleNext = useCallback(() => {
+    setSelectedIndex((prev) => (prev !== null && prev < photos.length - 1 ? prev + 1 : 0));
+  }, [photos.length]);
+
+  const handleClose = useCallback(() => {
+    setSelectedIndex(null);
+  }, []);
+
   useEffect(() => {
     void load();
   }, []);
+
+  // Keyboard navigation for lightbox
+  useEffect(() => {
+    if (selectedIndex === null) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") handleClose();
+      if (e.key === "ArrowLeft") handlePrev();
+      if (e.key === "ArrowRight") handleNext();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedIndex, handleClose, handlePrev, handleNext]);
+
+  // Lock body scroll when lightbox is open
+  useEffect(() => {
+    if (selectedIndex !== null) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [selectedIndex]);
+
+  const activePhoto = selectedIndex !== null ? photos[selectedIndex] : null;
 
   return (
     <div>
@@ -145,15 +184,109 @@ export function GalleryPhotos() {
       {connected && photos.length > 0 && (
         <>
           <div className="photo-grid">
-            {photos.map((photo) => (
-              <a className="photo-tile" href={photo.url} key={photo.id} target="_blank" rel="noreferrer">
-                <img src={photo.url} alt={photo.name} loading="lazy" />
+            {photos.map((photo, index) => (
+              <button
+                type="button"
+                className="photo-tile photo-tile-button"
+                key={photo.id}
+                onClick={() => setSelectedIndex(index)}
+                aria-label={`View ${photo.name}`}
+              >
+                <img
+                  src={photo.url}
+                  alt={photo.name}
+                  loading="lazy"
+                  draggable={false}
+                  onContextMenu={(e) => e.preventDefault()}
+                />
                 <span className="photo-caption">{photo.name}</span>
-              </a>
+              </button>
             ))}
           </div>
           <p className="photo-count">{photos.length} PHOTOGRAPHS · FROM YOUR SELECTED DRIVE FOLDER</p>
         </>
+      )}
+
+      {activePhoto !== null && (
+        <div
+          className="lightbox-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label={activePhoto.name}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleClose();
+          }}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <div className="lightbox-topbar">
+            <span className="lightbox-counter">
+              {(selectedIndex ?? 0) + 1} / {photos.length}
+            </span>
+            <span className="lightbox-title">{activePhoto.name}</span>
+            <button
+              type="button"
+              className="lightbox-close-btn"
+              onClick={handleClose}
+              aria-label="Close photo view"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          <div
+            className="lightbox-stage"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) handleClose();
+            }}
+          >
+            {photos.length > 1 && (
+              <button
+                type="button"
+                className="lightbox-nav-btn lightbox-prev"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePrev();
+                }}
+                aria-label="Previous photo"
+              >
+                <ChevronLeft size={28} />
+              </button>
+            )}
+
+            <div
+              className="lightbox-img-wrapper"
+              onContextMenu={(e) => e.preventDefault()}
+            >
+              <img
+                src={activePhoto.url}
+                alt={activePhoto.name}
+                className="lightbox-img"
+                draggable={false}
+                onContextMenu={(e) => e.preventDefault()}
+                onDragStart={(e) => e.preventDefault()}
+              />
+              <div
+                className="lightbox-protection-guard"
+                onContextMenu={(e) => e.preventDefault()}
+                onDragStart={(e) => e.preventDefault()}
+              />
+            </div>
+
+            {photos.length > 1 && (
+              <button
+                type="button"
+                className="lightbox-nav-btn lightbox-next"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleNext();
+                }}
+                aria-label="Next photo"
+              >
+                <ChevronRight size={28} />
+              </button>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
