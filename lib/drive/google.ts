@@ -88,13 +88,33 @@ export async function listGalleryPhotos(forceRefresh = false): Promise<DriveFile
     } while (pageToken);
   }
 
-  const photoMap = new Map<string, DriveFile>();
+  // Deduplicate photos:
+  // If multiple files share the exact same filename and byte size, keep the newest version.
+  const uniqueKeyMap = new Map<string, DriveFile>();
   for (const photo of photos) {
+    const key = `${photo.name.toLowerCase()}::${photo.size ?? "0"}`;
+    const existing = uniqueKeyMap.get(key);
+    if (!existing) {
+      uniqueKeyMap.set(key, photo);
+    } else {
+      // Keep the file with the newer modifiedTime (or keep existing if no newer timestamp)
+      const existingTime = existing.modifiedTime ? new Date(existing.modifiedTime).getTime() : 0;
+      const newTime = photo.modifiedTime ? new Date(photo.modifiedTime).getTime() : 0;
+      if (newTime > existingTime) {
+        uniqueKeyMap.set(key, photo);
+      }
+    }
+  }
+
+  const uniquePhotos = Array.from(uniqueKeyMap.values());
+
+  const photoMap = new Map<string, DriveFile>();
+  for (const photo of uniquePhotos) {
     photoMap.set(photo.id, photo);
   }
-  memoryCache = { expiresAt: now + CACHE_TTL_MS, photos, photoMap };
+  memoryCache = { expiresAt: now + CACHE_TTL_MS, photos: uniquePhotos, photoMap };
 
-  return photos;
+  return uniquePhotos;
 }
 
 export async function getGalleryImage(fileId: string) {
